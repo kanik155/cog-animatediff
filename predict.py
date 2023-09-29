@@ -125,8 +125,7 @@ class Predictor(BasePredictor):
 
         print(f"sampling: {prompt} ...")
         outname = "output.gif"
-        outpath = f"./{outname}"
-        out_path = Path(tempfile.mkdtemp()) / "out.mp4"
+        outpath = Path(tempfile.mkdtemp()) / f"{outname}"
 
         sample = self.pipeline(
             prompt,
@@ -140,7 +139,5 @@ class Predictor(BasePredictor):
 
         samples = torch.concat([sample])
         save_videos_grid(samples, outpath , n_rows=1)
-        os.system("ffmpeg -i output.gif -movflags faststart -pix_fmt yuv420p -qp 17 "+ str(out_path))
-        # Fix so that it returns the actual gif or mp4 in replicate
         print(f"saved to file")
-        return Path(out_path)
+        return Path(outpath)
