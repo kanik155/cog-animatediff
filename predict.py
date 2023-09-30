@@ -33,16 +33,15 @@ class Predictor(BasePredictor):
         self,
         motion_module: str = Input(
             description="Select a Motion Model",
-            default="mm_sd_v14",
+            default="mm_sd_v15_v2",
             choices=[
-                "mm_sd_v14",
-                "mm_sd_v15",
                 "mm_sd_v15_v2"
             ],
         ),
         path: str = Input(
-            default="toonyou_beta3.safetensors",
+            default="mistoonAnime_v20.safetensors",
             choices=[
+                "mistoonAnime_v20.safetensors",
                 "toonyou_beta3.safetensors",
                 "lyriel_v16.safetensors",
                 "rcnzCartoon3d_v10.safetensors",
@@ -132,8 +131,8 @@ class Predictor(BasePredictor):
             negative_prompt     = n_prompt,
             num_inference_steps = steps,
             guidance_scale      = guidance_scale,
-            width               = 512,
-            height              = 512,
+            width               = 640,
+            height              = 640,
             video_length        = 16,
         ).videos
 
