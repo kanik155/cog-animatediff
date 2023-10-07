@@ -1,10 +1,8 @@
-# Prediction interface for Cog ⚙️
-# https://github.com/replicate/cog/blob/main/docs/python.md
-
 from cog import BasePredictor, Input, Path
 import os
 import sys
-sys.path.extend(['/AnimateDiff'])
+
+sys.path.extend(["/AnimateDiff"])
 import tempfile
 import diffusers
 from diffusers import AutoencoderKL, DDIMScheduler
@@ -16,17 +14,27 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from animatediff.models.unet import UNet3DConditionModel
 from animatediff.pipelines.pipeline_animation import AnimationPipeline
 from animatediff.utils.util import save_videos_grid
-from animatediff.utils.convert_from_ckpt import convert_ldm_unet_checkpoint, convert_ldm_vae_checkpoint
+from animatediff.utils.convert_from_ckpt import (
+    convert_ldm_unet_checkpoint,
+    convert_ldm_vae_checkpoint,
+)
 from animatediff.utils.convert_lora_safetensor_to_diffusers import convert_lora
 
 from diffusers.utils.import_utils import is_xformers_available
 
+
 class Predictor(BasePredictor):
     def setup(self) -> None:
         """Load the model into memory to make running multiple predictions efficient"""
-        pretrained_model_path = "/AnimateDiff/models/StableDiffusion/stable-diffusion-v1-5"
-        self.tokenizer = CLIPTokenizer.from_pretrained(pretrained_model_path, subfolder="tokenizer")
-        self.text_encoder = CLIPTextModel.from_pretrained(pretrained_model_path, subfolder="text_encoder")
+        pretrained_model_path = (
+            "/AnimateDiff/models/StableDiffusion/stable-diffusion-v1-5"
+        )
+        self.tokenizer = CLIPTokenizer.from_pretrained(
+            pretrained_model_path, subfolder="tokenizer"
+        )
+        self.text_encoder = CLIPTextModel.from_pretrained(
+            pretrained_model_path, subfolder="text_encoder"
+        )
         self.vae = AutoencoderKL.from_pretrained(pretrained_model_path, subfolder="vae")
 
     def predict(
@@ -34,34 +42,36 @@ class Predictor(BasePredictor):
         motion_module: str = Input(
             description="Select a Motion Model",
             default="mm_sd_v15_v2",
-            choices=[
-                "mm_sd_v15_v2"
-            ],
+            choices=["mm_sd_v15_v2"],
         ),
         path: str = Input(
             default="mistoonAnime_v20.safetensors",
             choices=[
                 "mistoonAnime_v20.safetensors",
-                "toonyou_beta3.safetensors",
-                "lyriel_v16.safetensors",
-                "rcnzCartoon3d_v10.safetensors",
-                "majicmixRealistic_v5Preview.safetensors",
-                "realisticVisionV40_v20Novae.safetensors"
             ],
             description="Select a Module",
         ),
-        prompt: str = Input(description="Input prompt", default="masterpiece, best quality, 1girl, solo, cherry blossoms, hanami, pink flower, white flower, spring season, wisteria, petals, flower, plum blossoms, outdoors, falling petals, white hair, black eyes"),
+        prompt: str = Input(
+            description="Input prompt",
+            default="masterpiece, best quality, 1girl, solo, cherry blossoms, hanami, pink flower, white flower, spring season, wisteria, petals, flower, plum blossoms, outdoors, falling petals, white hair, black eyes",
+        ),
         n_prompt: str = Input(description="Negative prompt", default=""),
-        steps: int = Input(description="Number of inference steps", ge=1, le=100, default=25),
-        guidance_scale: float = Input(description="guidance scale", ge=1, le=10, default=7.5),
-        seed: int = Input(description="Seed (0 = random, maximum: 2147483647)", default=None),
-    ) -> Path:
+        steps: int = Input(
+            description="Number of inference steps", ge=1, le=100, default=25
+        ),
+        guidance_scale: float = Input(
+            description="guidance scale", ge=1, le=10, default=7.5
+        ),
+        seed: int = Input(
+            description="Seed (0 = random, maximum: 2147483647)", default=None
+        ),
+    ) -> list[Path]:
         """Run a single prediction on the model"""
-        lora_alpha=0.8
-        base=""
+        lora_alpha = 0.8
+        base = ""
         # Create paths and load motion model
-        newPath = "models/DreamBooth_LoRA/"+path
-        motion_path = "/AnimateDiff/models/Motion_Module/"+motion_module+".ckpt"
+        newPath = "models/DreamBooth_LoRA/" + path
+        motion_path = "/AnimateDiff/models/Motion_Module/" + motion_module + ".ckpt"
         # Support new v2 motion module
         if motion_module.endswith("v2"):
             inference_config_file = "/AnimateDiff/configs/inference/inference-v2.yaml"
@@ -72,20 +82,30 @@ class Predictor(BasePredictor):
         self.unet = UNet3DConditionModel.from_pretrained_2d(
             "/AnimateDiff/models/StableDiffusion/stable-diffusion-v1-5",
             subfolder="unet",
-            unet_additional_kwargs=OmegaConf.to_container(inference_config.unet_additional_kwargs)
+            unet_additional_kwargs=OmegaConf.to_container(
+                inference_config.unet_additional_kwargs
+            ),
         )
         self.pipeline = AnimationPipeline(
-            vae=self.vae, text_encoder=self.text_encoder, tokenizer=self.tokenizer, unet=self.unet,
-            scheduler=DDIMScheduler(**OmegaConf.to_container(inference_config.noise_scheduler_kwargs)),
+            vae=self.vae,
+            text_encoder=self.text_encoder,
+            tokenizer=self.tokenizer,
+            unet=self.unet,
+            scheduler=DDIMScheduler(
+                **OmegaConf.to_container(inference_config.noise_scheduler_kwargs)
+            ),
         ).to("cuda")
-        if is_xformers_available(): self.unet.enable_xformers_memory_efficient_attention()
+        if is_xformers_available():
+            self.unet.enable_xformers_memory_efficient_attention()
 
         motion_module_state_dict = torch.load(motion_path, map_location="cpu")
-        missing, unexpected = self.unet.load_state_dict(motion_module_state_dict, strict=False)
+        missing, unexpected = self.unet.load_state_dict(
+            motion_module_state_dict, strict=False
+        )
         assert len(unexpected) == 0
 
         if path != "":
-            fullPath = "/AnimateDiff/"+newPath
+            fullPath = "/AnimateDiff/" + newPath
             if path.endswith(".ckpt"):
                 state_dict = torch.load(fullPath)
                 self.unet.load_state_dict(state_dict)
@@ -106,14 +126,20 @@ class Predictor(BasePredictor):
                         for key in f.keys():
                             base_state_dict[key] = f.get_tensor(key)
                 # vae
-                converted_vae_checkpoint = convert_ldm_vae_checkpoint(base_state_dict, self.vae.config)
+                converted_vae_checkpoint = convert_ldm_vae_checkpoint(
+                    base_state_dict, self.vae.config
+                )
                 self.vae.load_state_dict(converted_vae_checkpoint)
                 # unet
-                converted_unet_checkpoint = convert_ldm_unet_checkpoint(base_state_dict, self.unet.config)
+                converted_unet_checkpoint = convert_ldm_unet_checkpoint(
+                    base_state_dict, self.unet.config
+                )
                 self.unet.load_state_dict(converted_unet_checkpoint, strict=False)
 
                 if is_lora:
-                    self.pipeline = convert_lora(self.pipeline, state_dict, alpha=lora_alpha)
+                    self.pipeline = convert_lora(
+                        self.pipeline, state_dict, alpha=lora_alpha
+                    )
 
         self.pipeline.to("cuda")
 
@@ -123,20 +149,31 @@ class Predictor(BasePredictor):
         torch.manual_seed(seed)
 
         print(f"sampling: {prompt} ...")
-        outname = "output.gif"
-        outpath = Path(tempfile.mkdtemp()) / f"{outname}"
+        outname = "output"
+        outdir = Path(tempfile.mkdtemp())
+        gif_path = f"{outdir}/{outname}.gif"
+        mp4_path = f"{outdir}/{outname}.mp4"
 
         sample = self.pipeline(
             prompt,
-            negative_prompt     = n_prompt,
-            num_inference_steps = steps,
-            guidance_scale      = guidance_scale,
-            width               = 640,
-            height              = 640,
-            video_length        = 16,
+            negative_prompt=n_prompt,
+            num_inference_steps=steps,
+            guidance_scale=guidance_scale,
+            width=640,
+            height=640,
+            video_length=16,
         ).videos
 
         samples = torch.concat([sample])
-        save_videos_grid(samples, outpath , n_rows=1)
+        save_videos_grid(samples, gif_path, n_rows=1)
+        os.system(
+            f"ffmpeg -i {outdir}/output.gif -movflags faststart -pix_fmt yuv420p -qp 17 "
+            + str(mp4_path)
+        )
         print(f"saved to file")
-        return Path(outpath)
+
+        output = []
+        output.append(Path(gif_path))
+        output.append(Path(mp4_path))
+
+        return output
